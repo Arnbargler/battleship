@@ -4,7 +4,7 @@
 - Host: Colossus home server, trusted LAN only.
 - Stack: PHP 8.2+, PDO SQLite, vanilla HTML/CSS/JavaScript.
 - Style: Modern Naval Command; dark navy, cyan grids, tactical status, clear shot feedback.
-- Players: passwordless Chess Club-style named player selection; browser PHP session remembers selection.
+- Players: passwordless Chess Club-style named player selection; identity stored per browser tab and supplied in request header (LAN-only trust model).
 - Game creation defaults: **North Atlantic**, **human**, **Classic (10×10)**.
 - Two human browsers may create/join and resume a game.
 - Adjacent ships allowed; overlap prohibited.
@@ -24,7 +24,7 @@ POST `?action=create` `{"name":"North Atlantic","size":10}`.
 POST `?action=join` `{"id":1}`.
 GET `?action=game&id=1`: filtered player-visible state.
 POST `?action=randomize` `{"id":1}`: reroll own fleet before ready.
-POST `?action=ready` `{"id":1}`: lock own fleet.
+POST `?action=place` `{"id":1,"ship":0,"x":2,"y":4,"direction":"horizontal"}`: reposition one own ship before Ready; server validates length, bounds and overlaps.\nPOST `?action=ready` `{"id":1}`: lock own fleet.
 POST `?action=fire` `{"id":1,"x":3,"y":5}`: fire one shot, zero-indexed.
 GET `?action=stats`: player finished-game counts and wins.
 
@@ -37,7 +37,7 @@ The server never uses browser-submitted fleet state. SQLite writers use IMMEDIAT
 
 ## Development stages
 1. **Current:** minimal two-human game, auto-placement, rules and persistence.
-2. Manual placement UI and automated tests for turn order, winner and information hiding.
+2. **Current:** manual ship placement via left-drag, Space rotation, live validity preview, server validation. Automated integration testing still needed.
 3. Six AI levels behind the same legal-shot interface; human-vs-AI games.
 4. Custom board sizes and fleet editor with validation.
 5. Tournament batch runner, telemetry and probability heatmap.
