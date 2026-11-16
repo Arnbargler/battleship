@@ -6,3 +6,6 @@
 #own-board .cell.preview-valid{background:#167e8d;border:2px solid #84f6e6;opacity:1;box-shadow:inset 0 0 10px #18b5a466}
 #own-board .cell.preview-invalid{background:#862f38;border:2px solid #ff7c80;opacity:1}
 #placement-hint.invalid{color:#ff8f90}
+
+/* Author-level display rules must not override the native hidden attribute. */
+[hidden]{display:none!important}
