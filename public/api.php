@@ -152,7 +152,7 @@ try {
     $in=input();
     if ($action==='select') {
         $name=trim((string)($in['name']??''));
-        if (mb_strlen($name)>24 || mb_strlen($name)<1) fail('Player names must be 1–24 characters');
+        if (strlen($name)>24 || strlen($name)<1) fail('Player names must be 1–24 characters');
         $q=$db->prepare('INSERT OR IGNORE INTO players(name) VALUES(?)');$q->execute([$name]);
         $q=$db->prepare('SELECT id,name FROM players WHERE name=? COLLATE NOCASE');$q->execute([$name]);
         $p=$q->fetch();if (!$p) fail('Unable to select player',500);
@@ -163,7 +163,7 @@ try {
     $me=player();
     if ($action==='create') {
         $name=trim((string)($in['name']??'North Atlantic'));
-        if ($name==='' || mb_strlen($name)>60) fail('Operation name must be 1–60 characters');
+        if ($name==='' || strlen($name)>60) fail('Operation name must be 1–60 characters');
         $size=(int)($in['size']??10);config($size);
         $state=['host'=>['fleet'=>deploy($size),'ready'=>false], 'guest'=>['fleet'=>[],'ready'=>false]];
         $q=$db->prepare("INSERT INTO games(name,size,host_id,state) VALUES(?,?,?,?)");
