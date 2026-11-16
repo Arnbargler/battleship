@@ -14,7 +14,8 @@
   <div class="section-head"><div><small>OPERATIONS CENTER</small><h2>Active Operations</h2></div><button id="refresh">Refresh</button></div>
   <div class="two-col"><section class="panel"><h3>New Operation</h3><form id="create-form">
     <label>Operation name<input id="operation-name" maxlength="60" value="North Atlantic" required></label>
-    <label>Opponent<select id="opponent"><option value="human">Human player</option><option value="ai" disabled>Computer opponent — coming next</option></select></label>
+    <label>Opponent<select id="opponent"><option value="human">Human player</option><option value="ai">Computer opponent</option></select></label>
+    <label id="ai-selector" hidden>AI difficulty<select id="ai-level"><option value="1">AI 1 — Random</option><option value="2">AI 2 — Basic pursuit</option><option value="3">AI 3 — Checkerboard hunter</option><option value="4">AI 4 — Tactical pursuit</option><option value="5">AI 5 — Probability hunter</option><option value="6">AI 6 — Advanced probability</option></select></label>
     <label>Fleet configuration<select id="board-size"><option value="10">Classic — 10×10 / 5 ships</option><option value="8">Skirmish — 8×8 / 3 ships</option><option value="12">Grand Fleet — 12×12 / 6 ships</option></select></label>
     <p class="muted">Adjacent ships allowed. One shot per turn.</p><button type="submit" class="primary">Create Operation</button>
   </form></section><section class="panel"><div class="section-head"><h3>Available Games</h3><span id="game-count"></span></div><div id="games" class="stack"></div></section></div>
