@@ -14,13 +14,13 @@
 - Human-vs-human game flow: waiting -> deployment -> active -> finished.
 - Host can ready while waiting; game begins when guest joins and both are ready.
 - No premature forfeits for lost browser connections.
-- Future: 6 generic AI levels, flexible custom fleets, stats including accuracy, AI-only tournaments, AI probability heatmaps.
+- Human versus AI levels 1–6 supported. AI always plays guest, is automatically Ready, and replies in the same request after the host's shot. AI decisions use only their prior shot outcomes, not hidden human ship locations.\n- Future: flexible custom fleets, stats including accuracy, AI-only tournaments, AI probability heatmaps.
 
 ## Server API
 GET `public/api.php?action=players`: list player names and current session.
 POST `?action=select` `{"name":"Dad"}`: set player identity.
 GET `?action=lobby`: waiting games and games belonging to current player.
-POST `?action=create` `{"name":"North Atlantic","size":10}`.
+POST `?action=create` `{"name":"North Atlantic","size":10,"ai_level":0}`. `ai_level` 0 = human; 1–6 = automated guest.
 POST `?action=join` `{"id":1}`.
 GET `?action=game&id=1`: filtered player-visible state.
 POST `?action=randomize` `{"id":1}`: reroll own fleet before ready.
@@ -38,11 +38,11 @@ The server never uses browser-submitted fleet state. SQLite writers use IMMEDIAT
 ## Development stages
 1. **Current:** minimal two-human game, auto-placement, rules and persistence.
 2. **Current:** manual ship placement via left-drag, Space rotation, live validity preview, server validation. Automated integration testing still needed.
-3. Six AI levels behind the same legal-shot interface; human-vs-AI games.
+3. **Implemented, field test pending:** six AI levels behind the same legal-shot interface; human-vs-AI games.
 4. Custom board sizes and fleet editor with validation.
 5. Tournament batch runner, telemetry and probability heatmap.
 6. Deployment hardening, cleanup, service configuration, backup plan.
 
 ## Non-goals for initial milestone
 - Password accounts, Internet exposure, chat, sounds, custom ship imagery, synchronous WebSockets, spectator accounts.
-- AI opponents and tournaments are deliberately **not yet available**.
+- AI tournaments and the heatmap are **not yet available**.
