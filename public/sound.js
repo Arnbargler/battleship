@@ -18,7 +18,7 @@ window.BattleSound=(()=>{
     osc.type=type;osc.frequency.setValueAtTime(Math.max(20,freq),start);
     if(to)osc.frequency.exponentialRampToValueAtTime(Math.max(20,to),start+duration);
     gain.gain.setValueAtTime(.0001,start);
-    gain.gain.exponentialRampToValueAtTime(volume,start+.012);
+    gain.gain.exponentialRampToValueAtTime(Math.min(volume*2,.3),start+.012);
     gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
     osc.connect(gain);gain.connect(ctx.destination);osc.start(start);osc.stop(start+duration+.02);
   }
@@ -29,7 +29,7 @@ window.BattleSound=(()=>{
     for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);
     const source=ctx.createBufferSource(),gain=ctx.createGain(),filter=ctx.createBiquadFilter();
     source.buffer=buffer;filter.type='lowpass';filter.frequency.value=1100;
-    gain.gain.value=volume;source.connect(filter);filter.connect(gain);gain.connect(ctx.destination);
+    gain.gain.value=Math.min(volume*2,.3);source.connect(filter);filter.connect(gain);gain.connect(ctx.destination);
     source.start(ctx.currentTime+delay);
   }
   const effects={
