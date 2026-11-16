@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Battleship // Naval Command</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="brand"><span class="mark">◈</span><div><small>BATTLESHIP // TACTICAL NETWORK</small><h1>NAVAL COMMAND</h1></div></div><div class="identity"><span id="identity">NO COMMANDER</span> <button id="change-player" class="ghost">Change Player</button></div></header>
+<main>
+<div id="notice" role="alert" hidden></div>
+<section id="select-panel" class="panel" hidden><h2>Identify Commander</h2><p>Choose an existing player or enter a new name. No password is required on this trusted LAN.</p><form id="player-form"><label>Commander name <input id="player-name" list="known-players" maxlength="24" required placeholder="Dad"></label><datalist id="known-players"></datalist><button type="submit">Enter Command</button></form></section>
+<section id="lobby" hidden>
+  <div class="section-head"><div><small>OPERATIONS CENTER</small><h2>Active Operations</h2></div><button id="refresh">Refresh</button></div>
+  <div class="two-col"><section class="panel"><h3>New Operation</h3><form id="create-form">
+    <label>Operation name<input id="operation-name" maxlength="60" value="North Atlantic" required></label>
+    <label>Opponent<select id="opponent"><option value="human">Human player</option><option value="ai" disabled>Computer opponent — coming next</option></select></label>
+    <label>Fleet configuration<select id="board-size"><option value="10">Classic — 10×10 / 5 ships</option><option value="8">Skirmish — 8×8 / 3 ships</option><option value="12">Grand Fleet — 12×12 / 6 ships</option></select></label>
+    <p class="muted">Adjacent ships allowed. One shot per turn.</p><button type="submit" class="primary">Create Operation</button>
+  </form></section><section class="panel"><div class="section-head"><h3>Available Games</h3><span id="game-count"></span></div><div id="games" class="stack"></div></section></div>
+  <section class="panel"><h3>Commander Statistics</h3><div id="stats" class="table-wrap"></div></section>
+</section>
+<section id="battle" hidden>
+  <div class="section-head"><div><small id="operation-subtitle">OPERATION</small><h2 id="battle-title">North Atlantic</h2></div><button id="back">← Lobby</button></div>
+  <div id="battle-status" class="status"></div>
+  <div id="deployment" class="panel" hidden><div class="section-head"><div><h3>Fleet Deployment</h3><p class="muted">Ships are deployed automatically. Randomize until satisfied, then lock your fleet.</p></div><div class="actions"><button id="randomize">Randomize Fleet</button><button id="ready" class="primary">Ready</button></div></div></div>
+  <div class="boards"><section class="panel"><h3>ENEMY WATERS <span class="muted">— select a target on your turn</span></h3><div id="enemy-board" class="board"></div></section><section class="panel"><h3>FRIENDLY WATERS</h3><div id="own-board" class="board"></div></section></div>
+  <div class="panel"><h3>Combat Telemetry</h3><div id="telemetry" class="muted">Awaiting operation...</div></div>
+</section>
+<footer>COLOSSUS NAVAL COMMAND · PROTOTYPE v0.1 · LAN ONLY</footer>
+</main><script src="app.js"></script></body></html>
