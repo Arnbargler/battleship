@@ -40,6 +40,17 @@ function db(): PDO {
     return $pdo;
 }
 function player(): int {
+    // Passwordless LAN identities are selected per browser tab, not per PHP cookie.
+    // Two tabs may share PHPSESSID while representing different commanders.
+    $claimed=$_SERVER['HTTP_X_BATTLESHIP_PLAYER']??null;
+    if ($claimed!==null) {
+        if (!ctype_digit((string)$claimed) || (int)$claimed<1) fail('Invalid player identity',401);
+        $id=(int)$claimed;
+        $q=db()->prepare('SELECT id FROM players WHERE id=?');
+        $q->execute([$id]);
+        if (!$q->fetch()) fail('Unknown player identity',401);
+        return $id;
+    }
     if (empty($_SESSION['player_id'])) fail('Select a player first', 401);
     return (int) $_SESSION['player_id'];
 }
