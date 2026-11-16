@@ -3,7 +3,7 @@
 Browser-based Battleship for Colossus, using PHP 8.2+, SQLite, and vanilla JavaScript.
 
 ## Status
-**v0.1 foundation (work in progress).** Human-versus-human and human-versus-AI games with server-controlled turns, drag/Space fleet deployment, lobby, and basic statistics. AI levels 1–6 are implemented; custom fleets, tournaments, and heatmaps remain planned.
+**v0.1 foundation (work in progress).** Human-versus-human and human-versus-AI games with server-controlled turns, drag/Space fleet deployment, lobby, and basic statistics. AI levels 1–6 and a tactical battle UI with audio, hit/miss markers, shot metrics, and combat log are implemented; custom fleets, tournaments, and heatmaps remain planned.
 
 ## Run locally
 Requires PHP with the `pdo_sqlite` extension.
@@ -18,6 +18,14 @@ Visit `http://colossus.local:8090` (or your server IP). Storage is initialized a
 
 ## Usage
 Choose or create a player name. Create a new operation (default **North Atlantic**, 10×10 Classic, human opponent). For solo play, choose **Computer opponent** and select **AI 1–6**. Open another browser using a different player to join. Each player starts with a valid random fleet, may drag ships and use Spacebar to rotate, then clicks **Ready**; shots alternate. In solo games the AI is already ready, responds automatically after each player shot, and does not require a second browser. Revisit the game to resume. Finished games remain available for results and statistics.
+
+## Battle interface
+
+- Prominent cyan outlined misses and red/orange hit/sunk markers on both grids.
+- Turn status bar, shot and accuracy metrics, chronological recent-shot combat log.
+- Browser-generated effects for firing, miss, hit, sinking, victory and defeat; no sound assets required.
+- SOUND ON/OFF toggle stored in browser localStorage. Browsers require interaction before playing audio.
+- Sound is local to each browser, and a returning viewer does not replay old shots.
 
 ## Agreed roadmap
 - Naval-command dark/cyan user interface
