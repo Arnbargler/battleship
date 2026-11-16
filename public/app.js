@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 let me=null, current=null, busy=false, viewSerial=0, lastApplied=0, polling=false;
 const savedPlayerKey='battleship.player.id';
 let tabPlayerId=Number(sessionStorage.getItem(savedPlayerKey))||null;
-let drag=null, shownGame=null;
+let drag=null, shownGame=null, audioGameId=null, lastAudioShotId=0, lastOutcome=null;
 const esc = text => String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(action, data=null, query='') {
   const headers=tabPlayerId?{'X-Battleship-Player':String(tabPlayerId)}:{};
@@ -70,7 +70,7 @@ function makeBoard(node,g,isEnemy) {
       const cell=document.createElement('button');cell.type='button';
       const canFire=isEnemy&&g.status==='active'&&Number(g.turn_id)===Number(g.you)&&!shot;
       cell.className='cell'+(occupied.has(k)?' ship':'')+(shot?' '+(shot==='sunk'?'sunk':shot):'')+(canFire?' target':'');
-      cell.textContent=shot?(shot==='miss'?'·':'✕'):'';
+      cell.textContent=shot?(shot==='miss'?'•':'✕'):'';
       cell.title=String.fromCharCode(65+x)+(y+1)+(shot?' — '+shot:'');
       cell.setAttribute('aria-label',cell.title);
       cell.dataset.x=x;cell.dataset.y=y;
@@ -81,6 +81,21 @@ function makeBoard(node,g,isEnemy) {
   }
 }
 function drawGame(g) {
+  const shotTimeline=[...g.target_shots.map(s=>({...s,side:'outgoing'})),...g.own_shots.map(s=>({...s,side:'incoming'}))].sort((a,b)=>a.id-b.id);
+  // First render is silent; subsequent server-confirmed events produce cues once.
+  if(audioGameId!==g.id) {
+    audioGameId=g.id;
+    lastAudioShotId=shotTimeline.at(-1)?.id||0;
+    lastOutcome=g.status==='finished'?g.winner_id:null;
+  } else {
+    const events=shotTimeline.filter(s=>s.id>lastAudioShotId);
+    const recent=events.at(-1);
+    if(recent && document.visibilityState==='visible') BattleSound.play(recent.result==='sunk'?'sunk':recent.result==='hit'?'hit':'miss');
+    lastAudioShotId=Math.max(lastAudioShotId,shotTimeline.at(-1)?.id||0);
+    if(g.status==='finished'&&lastOutcome===null&&document.visibilityState==='visible')
+      BattleSound.play(Number(g.winner_id)===Number(g.you)?'victory':'defeat');
+    lastOutcome=g.status==='finished'?g.winner_id:null;
+  }
   shownGame=g;
   $('battle-title').textContent=g.name;
   $('operation-subtitle').textContent='OPERATION '+g.id+' · '+g.size+'×'+g.size;
@@ -90,7 +105,11 @@ function drawGame(g) {
     g.status==='deployment'?(g.ready?'Fleet locked. Waiting for the opponent.':(g.ai_level?'Place your fleet, then click Ready to face AI '+g.ai_level+'.':'Deploy your fleet and select Ready.')):
     g.status==='finished'?(Number(g.winner_id)===Number(me.id)?'VICTORY — Enemy fleet destroyed.':'DEFEAT — Your fleet was destroyed.'):
     (yourTurn?'YOUR TURN — Select a target in enemy waters.':'OPPONENT TURN — Awaiting incoming fire.');
-  $('battle-status').textContent=desc+'  [Player #'+g.you+' · Turn #'+(g.turn_id??'—')+']';
+  const phase=g.status==='finished'?'finished':g.status==='active'?(yourTurn?'your':'enemy'):'setup';
+  $('battle').dataset.phase=phase;
+  $('command-state').textContent=g.status==='finished'?'MISSION COMPLETE':g.status==='active'?'TACTICAL LINK ACTIVE':'DEPLOYMENT CHANNEL';
+  $('combat-phase').textContent=g.status==='finished'?'FINAL REPORT':yourTurn?'WEAPONS READY':g.status==='active'?'AWAITING OPPONENT':'STANDBY';
+  $('battle-status').textContent=desc;
   if(!sessionMatch) notice('Player identity mismatch. Use Change Player and select your commander again.');
   $('deployment').hidden=!['waiting','deployment'].includes(g.status);
   $('placement-hint').hidden=g.ready || !['waiting','deployment'].includes(g.status);
@@ -100,6 +119,16 @@ function drawGame(g) {
   makeBoard($('enemy-board'),g,true);
   makeBoard($('own-board'),g,false);
   const hits=g.target_shots.filter(s=>s.result!=='miss').length;
+  $('metric-shots').textContent=g.target_shots.length;
+  $('metric-hits').textContent=hits;
+  $('metric-accuracy').textContent=g.target_shots.length?(100*hits/g.target_shots.length).toFixed(1)+'%':'0%';
+  $('metric-incoming').textContent=g.own_shots.length;
+  $('combat-log').innerHTML=shotTimeline.length?shotTimeline.slice(-12).reverse().map(s=>{
+    const coord=String.fromCharCode(65+s.x)+(s.y+1);
+    const actor=s.side==='outgoing'?'YOU':'ENEMY';
+    const outcome=s.result.toUpperCase();
+    return '<div class="log-entry '+esc(s.result)+'"><span><strong>'+actor+' · '+outcome+'</strong></span><span class="coord">'+coord+'</span></div>';
+  }).join(''):'<div class="log-entry">No shots fired yet.</div>';
   $('telemetry').textContent='Shots fired: '+g.target_shots.length+' · Confirmed hits: '+hits+' · Enemy shots received: '+g.own_shots.length+
     (g.status==='finished'?' · Operation complete':'');
   section('battle');
@@ -107,6 +136,7 @@ function drawGame(g) {
 async function fire(id,x,y) {
   if(busy||!confirm('Fire at '+String.fromCharCode(65+x)+(y+1)+'?'))return;
   busy=true;
+  BattleSound.unlock();BattleSound.play('fire');
   try {notice();const r=await api('fire',{id,x,y});lastApplied=++viewSerial;drawGame(r.game);}
   catch(e){notice(e.message);await loadGame();}
   finally{busy=false;}
@@ -140,6 +170,9 @@ $('refresh').addEventListener('click',()=>loadLobby().catch(e=>notice(e.message)
 $('back').addEventListener('click',()=>{current=null;loadLobby().catch(e=>notice(e.message));});
 $('randomize').addEventListener('click',()=>postGame('randomize'));
 $('ready').addEventListener('click',()=>postGame('ready'));
+function updateSoundButton() { const on=BattleSound.enabled; $('sound-toggle').textContent=on?'🔊 SOUND ON':'🔇 SOUND OFF'; $('sound-toggle').setAttribute('aria-pressed',String(on)); }
+$('sound-toggle').addEventListener('click',()=>{BattleSound.setEnabled(!BattleSound.enabled);updateSoundButton();if(BattleSound.enabled)BattleSound.play('miss');});
+updateSoundButton();
 setInterval(async()=>{
   if(document.visibilityState!=='visible'||busy||polling||!me||drag)return;
   polling=true;
