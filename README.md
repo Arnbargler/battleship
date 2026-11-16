@@ -3,7 +3,7 @@
 Browser-based Battleship for Colossus, using PHP 8.2+, SQLite, and vanilla JavaScript.
 
 ## Status
-**v0.1 foundation (work in progress).** Human-versus-human games with server-controlled turns, automatic fleet deployment, lobby, and basic statistics. AI, custom fleets, tournaments, and heatmaps are planned, not yet implemented.
+**v0.1 foundation (work in progress).** Human-versus-human and human-versus-AI games with server-controlled turns, drag/Space fleet deployment, lobby, and basic statistics. AI levels 1–6 are implemented; custom fleets, tournaments, and heatmaps remain planned.
 
 ## Run locally
 Requires PHP with the `pdo_sqlite` extension.
@@ -17,11 +17,11 @@ php -S 0.0.0.0:8090 -t public
 Visit `http://colossus.local:8090` (or your server IP). Storage is initialized automatically under `data/`; the database is deliberately **outside the web root**. Do not expose the prototype to the public Internet: player selection is passwordless and intended for a trusted LAN.
 
 ## Usage
-Choose or create a player name. Create a new operation (default **North Atlantic**, 10×10 Classic, human opponent). Open another browser using a different player to join. Each player automatically receives a valid random fleet and clicks **Ready**; then alternate shots. Revisit the game to resume. Finished games remain available for results and statistics.
+Choose or create a player name. Create a new operation (default **North Atlantic**, 10×10 Classic, human opponent). For solo play, choose **Computer opponent** and select **AI 1–6**. Open another browser using a different player to join. Each player starts with a valid random fleet, may drag ships and use Spacebar to rotate, then clicks **Ready**; shots alternate. In solo games the AI is already ready, responds automatically after each player shot, and does not require a second browser. Revisit the game to resume. Finished games remain available for results and statistics.
 
 ## Agreed roadmap
 - Naval-command dark/cyan user interface
-- Human players plus six generic AI levels (1–6)
+- Human players plus six generic AI levels (1–6), implemented
 - Flexible board sizes and fleets; classic five ships on 10×10 by default
 - Ships may touch, but not overlap; one shot per turn
 - Persistent games, player statistics
