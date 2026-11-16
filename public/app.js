@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 let me=null, current=null, busy=false, viewSerial=0, lastApplied=0, polling=false;
 const savedPlayerKey='battleship.player.id';
 let tabPlayerId=Number(sessionStorage.getItem(savedPlayerKey))||null;
+let drag=null, shownGame=null;
 const esc = text => String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(action, data=null, query='') {
   const headers=tabPlayerId?{'X-Battleship-Player':String(tabPlayerId)}:{};
@@ -47,10 +48,10 @@ async function loadLobby() {
   section('lobby');
 }
 async function loadGame() {
-  if(!current||!me||busy)return;
+  if(!current||!me||busy||drag)return;
   const wanted=current, serial=++viewSerial;
   const response=await api('game',null,'&id='+wanted);
-  if(current!==wanted || serial<lastApplied || busy)return;
+  if(current!==wanted || serial<lastApplied || busy || drag)return;
   lastApplied=serial;
   drawGame(response.game);
 }
@@ -72,13 +73,16 @@ function makeBoard(node,g,isEnemy) {
       cell.className='cell'+(occupied.has(k)?' ship':'')+(shot?' '+(shot==='sunk'?'sunk':shot):'')+(canFire?' target':'');
       cell.textContent=shot?(shot==='miss'?'·':'✕'):'';
       cell.title=String.fromCharCode(65+x)+(y+1)+(shot?' — '+shot:'');
-      cell.setAttribute('aria-label',cell.title);cell.disabled=!canFire;
+      cell.setAttribute('aria-label',cell.title);
+      cell.dataset.x=x;cell.dataset.y=y;
+      cell.disabled=!canFire && !( !isEnemy && ['waiting','deployment'].includes(g.status) && !g.ready && occupied.has(k));
       if(canFire) cell.addEventListener('click',()=>fire(g.id,x,y));
       node.append(cell);
     }
   }
 }
 function drawGame(g) {
+  shownGame=g;
   $('battle-title').textContent=g.name;
   $('operation-subtitle').textContent='OPERATION '+g.id+' · '+g.size+'×'+g.size;
   const yourTurn=g.status==='active'&&Number(g.turn_id)===Number(g.you);
@@ -136,10 +140,109 @@ $('back').addEventListener('click',()=>{current=null;loadLobby().catch(e=>notice
 $('randomize').addEventListener('click',()=>postGame('randomize'));
 $('ready').addEventListener('click',()=>postGame('ready'));
 setInterval(async()=>{
-  if(document.visibilityState!=='visible'||busy||polling||!me)return;
+  if(document.visibilityState!=='visible'||busy||polling||!me||drag)return;
   polling=true;
   try {if(current)await loadGame();else await loadLobby();}
   catch(e){notice(e.message);}
   finally{polling=false;}
 },2500);
+
+// Fleet deployment: drag one vessel, press Space to rotate, release to save.
+// We use pointer coordinates rather than HTML drag/drop so mouse and touch work alike.
+function canDeploy() {
+  return shownGame && current===shownGame.id && !shownGame.ready &&
+    ['waiting','deployment'].includes(shownGame.status) && !busy;
+}
+function shipAt(fleet,x,y) {
+  return fleet.findIndex(ship=>ship.some(([sx,sy])=>sx===x&&sy===y));
+}
+function directionOf(ship) {return ship.length>1&&ship[0][0]===ship[1][0]?'vertical':'horizontal';}
+function candidateCells(d) {
+  return Array.from({length:d.length},(_,i)=>[
+    d.x+(d.direction==='horizontal'?i:0),d.y+(d.direction==='vertical'?i:0)
+  ]);
+}
+function validPlacement(d) {
+  if(!shownGame)return false;
+  const size=shownGame.size;
+  const blocked=new Set(shownGame.fleet.flatMap((ship,index)=>index===d.index?[]:ship.map(([x,y])=>x+','+y)));
+  return candidateCells(d).every(([x,y])=>x>=0&&y>=0&&x<size&&y<size&&!blocked.has(x+','+y));
+}
+function highlightDrag() {
+  const board=$('own-board');
+  board.querySelectorAll('.cell').forEach(el=>el.classList.remove('preview-valid','preview-invalid','moving-origin'));
+  if(!drag)return;
+  for(const [x,y] of shownGame.fleet[drag.index]){
+    const el=board.querySelector('.cell[data-x="'+x+'"][data-y="'+y+'"]');
+    if(el)el.classList.add('moving-origin');
+  }
+  const good=validPlacement(drag);
+  for(const [x,y] of candidateCells(drag)) {
+    const el=board.querySelector('.cell[data-x="'+x+'"][data-y="'+y+'"]');
+    if(el)el.classList.add(good?'preview-valid':'preview-invalid');
+  }
+  $('placement-hint').textContent=(good?'VALID':'INVALID')+' · '+drag.direction.toUpperCase()+
+    ' · Space to rotate · Release to '+(good?'place':'cancel');
+  $('placement-hint').classList.toggle('invalid',!good);
+}
+function cellFromPointer(e) {
+  const el=document.elementFromPoint(e.clientX,e.clientY)?.closest('#own-board .cell');
+  return el?{x:Number(el.dataset.x),y:Number(el.dataset.y)}:null;
+}
+$('own-board').addEventListener('pointerdown',e=>{
+  if(e.button!==0||!canDeploy())return;
+  const cell=e.target.closest('.cell');
+  if(!cell)return;
+  const x=Number(cell.dataset.x),y=Number(cell.dataset.y);
+  const index=shipAt(shownGame.fleet,x,y);
+  if(index<0)return;
+  e.preventDefault();
+  const ship=shownGame.fleet[index];
+  drag={index,length:ship.length,direction:directionOf(ship),
+    x:ship[0][0],y:ship[0][1],offsetX:x-ship[0][0],offsetY:y-ship[0][1],
+    pointerId:e.pointerId};
+  $('own-board').setPointerCapture(e.pointerId);
+  highlightDrag();
+});
+$('own-board').addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.pointerId)return;
+  const cell=cellFromPointer(e);
+  if(!cell)return;
+  drag.x=cell.x-drag.offsetX;drag.y=cell.y-drag.offsetY;
+  highlightDrag();
+});
+function cancelDrag() {
+  drag=null;
+  $('placement-hint').textContent='Left-drag a ship to move it · Space to rotate during drag';
+  $('placement-hint').classList.remove('invalid');
+  $('own-board').querySelectorAll('.cell').forEach(el=>el.classList.remove('preview-valid','preview-invalid','moving-origin'));
+}
+$('own-board').addEventListener('pointercancel',cancelDrag);
+$('own-board').addEventListener('lostpointercapture',()=>{if(drag)cancelDrag();});
+$('own-board').addEventListener('pointerup',async e=>{
+  if(!drag||e.pointerId!==drag.pointerId)return;
+  const placement={...drag},id=shownGame.id;
+  const valid=validPlacement(placement);
+  cancelDrag();
+  if(!valid){notice('Invalid placement: ship must fit and cannot overlap another vessel.');return;}
+  busy=true;
+  try {
+    notice();
+    const r=await api('place',{id,ship:placement.index,x:placement.x,y:placement.y,direction:placement.direction});
+    lastApplied=++viewSerial;drawGame(r.game);
+  }catch(err) {
+    notice(err.message);
+  }finally {busy=false;}
+});
+document.addEventListener('keydown',e=>{
+  if(e.code!=='Space'||!drag)return;
+  e.preventDefault();
+  // Keep the cell under the pointer anchored while the ship rotates.
+  const pivotX=drag.x+drag.offsetX,pivotY=drag.y+drag.offsetY;
+  drag.direction=drag.direction==='horizontal'?'vertical':'horizontal';
+  drag.offsetX=0;drag.offsetY=0;
+  drag.x=pivotX;drag.y=pivotY;
+  highlightDrag();
+});
+
 loadPlayers().catch(e=>notice(e.message));
