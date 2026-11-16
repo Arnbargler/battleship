@@ -25,6 +25,7 @@ Choose or create a player name. Create a new operation (default **North Atlantic
 - Turn status bar, shot and accuracy metrics, chronological recent-shot combat log.
 - Browser-generated effects for firing, miss, hit, sinking, victory and defeat; no sound assets required.
 - SOUND ON/OFF toggle stored in browser localStorage. Browsers require interaction before playing audio.
+- Audio output gain has been doubled (oscillator and noise components); AI replies approximately one second after a human shot, using a separate atomic AI turn request to avoid overlapping sound effects.
 - Sound is local to each browser, and a returning viewer does not replay old shots.
 
 ## Agreed roadmap
