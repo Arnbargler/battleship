@@ -91,6 +91,29 @@ function deploy(int $size): array {
     }
     return $fleet;
 }
+
+/** Validate one contiguous straight vessel with the same length as its original. */
+function placementCells(int $size, array $fleet, int $index, int $x, int $y, string $direction): array {
+    if (!isset($fleet[$index]) || !is_array($fleet[$index])) fail('Unknown vessel');
+    if (!in_array($direction, ['horizontal','vertical'], true)) fail('Invalid orientation');
+    $length=count($fleet[$index]);
+    if ($length<2 || $length>5) fail('Invalid ship length');
+    $cells=[];
+    $used=[];
+    foreach ($fleet as $i=>$ship) {
+        if ($i===$index) continue;
+        foreach ($ship as $cell) $used[$cell[0].','.$cell[1]]=true;
+    }
+    for ($offset=0;$offset<$length;$offset++) {
+        $cx=$x+($direction==='horizontal'?$offset:0);
+        $cy=$y+($direction==='vertical'?$offset:0);
+        if ($cx<0 || $cy<0 || $cx>=$size || $cy>=$size) fail('Ship extends beyond the board');
+        if (isset($used[$cx.','.$cy])) fail('Ship overlaps another vessel');
+        $cells[]=[$cx,$cy];
+    }
+    return $cells;
+}
+
 function shots(PDO $db, int $id): array {
     $q=$db->prepare('SELECT player_id,x,y,result FROM shots WHERE game_id=? ORDER BY id');
     $q->execute([$id]); return $q->fetchAll();
@@ -195,7 +218,7 @@ try {
         });
         respond(['game'=>view($db,$g,$me)]);
     }
-    if ($action==='randomize'||$action==='ready'||$action==='fire') {
+    if ($action==='randomize'||$action==='place'||$action==='ready'||$action==='fire') {
         $id=(int)($in['id']??0);
         $g=mutate($db,function()use($db,$id,$me,$action,$in){
             $g=game($db,$id);
@@ -205,6 +228,18 @@ try {
             if ($action==='randomize') {
                 if (!in_array($g['status'],['waiting','deployment'],true)||$state[$side]['ready']) fail('Deployment is locked',409);
                 $state[$side]['fleet']=deploy((int)$g['size']);
+                $q=$db->prepare("UPDATE games SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?");
+                $q->execute([json_encode($state,JSON_THROW_ON_ERROR),$id]);
+            } elseif ($action==='place') {
+                if (!in_array($g['status'],['waiting','deployment'],true)||$state[$side]['ready']) fail('Deployment is locked',409);
+                $index=filter_var($in['ship']??null,FILTER_VALIDATE_INT);
+                $x=filter_var($in['x']??null,FILTER_VALIDATE_INT);
+                $y=filter_var($in['y']??null,FILTER_VALIDATE_INT);
+                $direction=$in['direction']??null;
+                if ($index===false||$x===false||$y===false||!is_string($direction)) fail('Invalid placement');
+                $fleet=$state[$side]['fleet'];
+                $fleet[$index]=placementCells((int)$g['size'],$fleet,$index,$x,$y,$direction);
+                $state[$side]['fleet']=$fleet;
                 $q=$db->prepare("UPDATE games SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?");
                 $q->execute([json_encode($state,JSON_THROW_ON_ERROR),$id]);
             } elseif ($action==='ready') {
