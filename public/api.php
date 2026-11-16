@@ -46,9 +46,10 @@ function player(): int {
     if ($claimed!==null) {
         if (!ctype_digit((string)$claimed) || (int)$claimed<1) fail('Invalid player identity',401);
         $id=(int)$claimed;
-        $q=db()->prepare('SELECT id FROM players WHERE id=?');
+        $q=db()->prepare('SELECT id,name FROM players WHERE id=?');
         $q->execute([$id]);
-        if (!$q->fetch()) fail('Unknown player identity',401);
+        $selected=$q->fetch();
+        if (!$selected || preg_match('/^AI [1-6]$/i',$selected['name'])) fail('Unknown player identity',401);
         return $id;
     }
     if (empty($_SESSION['player_id'])) fail('Select a player first', 401);
@@ -133,6 +134,7 @@ function view(PDO $db, array $g, int $me): array {
     $finished=$g['status']==='finished';
     return [
         'id'=>$id,'name'=>$g['name'],'size'=>(int)$g['size'],
+        'ai_level'=>(int)($state['ai_level']??0),
         'status'=>$g['status'],'host_id'=>(int)$g['host_id'],
         'guest_id'=>$g['guest_id']===null?null:(int)$g['guest_id'],
         'turn_id'=>$g['turn_id']===null?null:(int)$g['turn_id'],
@@ -144,6 +146,129 @@ function view(PDO $db, array $g, int $me): array {
         'own_shots'=>$own,'target_shots'=>$target
     ];
 }
+
+/**
+ * Shoot using the exact same rules for human and computer players.
+ * Caller must hold an IMMEDIATE transaction.
+ */
+function takeShot(PDO $db, array $g, int $shooter, int $x, int $y): array {
+    if ($g['status']!=='active' || (int)$g['turn_id']!==$shooter) fail('Not your turn',409);
+    $size=(int)$g['size'];
+    if ($x<0 || $y<0 || $x>=$size || $y>=$size) fail('Invalid target');
+    $id=(int)$g['id'];
+    $state=json_decode($g['state'],true,512,JSON_THROW_ON_ERROR);
+    $enemy=$shooter===(int)$g['host_id']?'guest':'host';
+    $q=$db->prepare('SELECT x,y FROM shots WHERE game_id=? AND player_id=?');
+    $q->execute([$id,$shooter]);
+    $prior=array_map(fn($r)=>[(int)$r['x'],(int)$r['y']],$q->fetchAll());
+    if (in_array([$x,$y],$prior,true)) fail('Already fired at that cell',409);
+    $after=$prior;
+    $after[]=[$x,$y];
+    $hit=false;$sunk=false;
+    foreach ($state[$enemy]['fleet'] as $ship) {
+        if (!in_array([$x,$y],$ship,true)) continue;
+        $hit=true;$sunk=true;
+        foreach ($ship as $cell) if (!in_array($cell,$after,true)) $sunk=false;
+        break;
+    }
+    $result=$sunk?'sunk':($hit?'hit':'miss');
+    $q=$db->prepare('INSERT INTO shots(game_id,player_id,x,y,result) VALUES(?,?,?,?,?)');
+    $q->execute([$id,$shooter,$x,$y,$result]);
+    $won=true;
+    foreach ($state[$enemy]['fleet'] as $ship)
+        foreach ($ship as $cell) if (!in_array($cell,$after,true)) $won=false;
+    $other=$enemy==='host'?(int)$g['host_id']:(int)$g['guest_id'];
+    $q=$db->prepare("UPDATE games SET status=?,winner_id=?,turn_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?");
+    $q->execute([$won?'finished':'active',$won?$shooter:null,$won?null:$other,$id]);
+    return game($db,$id);
+}
+/**
+ * AI knows only its own previous shots, their outcomes and the initial fleet
+ * configuration. It never reads the opponent's hidden fleet.
+ */
+function chooseAiShot(PDO $db, array $g, int $level): array {
+    $size=(int)$g['size'];
+    $ai=(int)$g['guest_id'];
+    $q=$db->prepare('SELECT x,y,result FROM shots WHERE game_id=? AND player_id=? ORDER BY id');
+    $q->execute([(int)$g['id'],$ai]);
+    $history=$q->fetchAll();
+    $seen=[];$hits=[];$sunk=[];
+    foreach ($history as $s) {
+        $key=$s['x'].','.$s['y'];
+        $seen[$key]=$s['result'];
+        if ($s['result']==='hit') $hits[]=[(int)$s['x'],(int)$s['y']];
+        if ($s['result']==='sunk') $sunk[]=[(int)$s['x'],(int)$s['y']];
+    }
+    $available=[];
+    for ($y=0;$y<$size;$y++) for ($x=0;$x<$size;$x++)
+        if (!isset($seen[$x.','.$y])) $available[]=[$x,$y];
+    if (!$available) fail('AI has no remaining targets',500);
+    $random=static fn(array $a): array=>$a[random_int(0,count($a)-1)];
+    if ($level===1) return $random($available);
+    $targets=[];
+    foreach ($hits as [$hx,$hy]) {
+        foreach ([[1,0],[-1,0],[0,1],[0,-1]] as [$dx,$dy]) {
+            $tx=$hx+$dx;$ty=$hy+$dy;
+            if ($tx>=0&&$ty>=0&&$tx<$size&&$ty<$size&&!isset($seen[$tx.','.$ty]))
+                $targets[$tx.','.$ty]=[$tx,$ty];
+        }
+    }
+    if ($level===2 && $targets) return $random(array_values($targets));
+    // Level 3: checkerboard searching; Level 4: prioritize straight extensions.
+    if ($level>=3 && $targets && $level<=4) {
+        if ($level===4) {
+            $scores=[];
+            foreach ($targets as $key=>$cell) {
+                [$x,$y]=$cell;$score=0;
+                foreach ($hits as [$hx,$hy]) {
+                    if (($hx===$x&&abs($hy-$y)===1)||($hy===$y&&abs($hx-$x)===1))$score+=2;
+                    if ($hx===$x||$hy===$y)$score++;
+                }
+                $scores[$key]=$score;
+            }
+            $best=max($scores);return $random(array_values(array_filter($targets,fn($v,$k)=>$scores[$k]===$best,ARRAY_FILTER_USE_BOTH)));
+        }
+        return $random(array_values($targets));
+    }
+    if ($level<=4) {
+        $pool=array_values(array_filter($available,fn($c)=>(($c[0]+$c[1])%2)===0));
+        return $random($pool?:$available);
+    }
+    // Levels 5–6 score every possible placement of the remaining vessel lengths.
+    // A placement cannot cross a known miss, and active hits increase its score.
+    $lengths=config($size);
+    foreach ($sunk as $_) { // one vessel ends at each sunk shot; approximate lengths remain
+        if ($lengths) array_pop($lengths);
+    }
+    if (!$lengths) $lengths=[2];
+    $scores=[];
+    foreach ($available as [$x,$y]) $scores[$x.','.$y]=0;
+    foreach ($lengths as $length) {
+        for ($vertical=0;$vertical<=1;$vertical++)
+            for ($y=0;$y<=$size-($vertical?$length:1);$y++)
+                for ($x=0;$x<=$size-($vertical?1:$length);$x++) {
+                    $cells=[];$valid=true;$covered=0;
+                    for ($i=0;$i<$length;$i++) {
+                        $cx=$x+($vertical?0:$i);$cy=$y+($vertical?$i:0);
+                        $outcome=$seen[$cx.','.$cy]??null;
+                        if ($outcome==='miss'||$outcome==='sunk') {$valid=false;break;}
+                        if ($outcome==='hit') $covered++;
+                        $cells[]=[$cx,$cy];
+                    }
+                    if (!$valid)continue;
+                    $weight=$level===6?(1+$covered*10):1+$covered*4;
+                    foreach ($cells as [$cx,$cy])
+                        if (!isset($seen[$cx.','.$cy])) $scores[$cx.','.$cy]+=$weight;
+                }
+    }
+    if ($targets) foreach ($targets as $key=>$cell) $scores[$key]+=($level===6?35:12);
+    if (!$scores) return $random($available);
+    $best=max($scores);
+    $leaders=[];
+    foreach ($available as $cell) if (($scores[$cell[0].','.$cell[1]]??0)===$best) $leaders[]=$cell;
+    return $random($leaders?:$available);
+}
+
 function mutate(PDO $db, callable $f): mixed {
     $db->exec('BEGIN IMMEDIATE');
     try { $r=$f(); $db->commit(); return $r; }
@@ -190,6 +315,7 @@ try {
         $q=$db->prepare('INSERT OR IGNORE INTO players(name) VALUES(?)');$q->execute([$name]);
         $q=$db->prepare('SELECT id,name FROM players WHERE name=? COLLATE NOCASE');$q->execute([$name]);
         $p=$q->fetch();if (!$p) fail('Unable to select player',500);
+        if (preg_match('/^AI [1-6]$/i',$p['name'])) fail('AI players cannot be selected manually');
         session_regenerate_id(true);
         $_SESSION['player_id']=(int)$p['id'];
         respond(['player'=>$p]);
@@ -199,9 +325,21 @@ try {
         $name=trim((string)($in['name']??'North Atlantic'));
         if ($name==='' || strlen($name)>60) fail('Operation name must be 1–60 characters');
         $size=(int)($in['size']??10);config($size);
-        $state=['host'=>['fleet'=>deploy($size),'ready'=>false], 'guest'=>['fleet'=>[],'ready'=>false]];
-        $q=$db->prepare("INSERT INTO games(name,size,host_id,state) VALUES(?,?,?,?)");
-        $q->execute([$name,$size,$me,json_encode($state,JSON_THROW_ON_ERROR)]);
+        $level=filter_var($in['ai_level']??0,FILTER_VALIDATE_INT);
+        if ($level===false || $level<0 || $level>6) fail('AI level must be between 0 and 6');
+        $guestId=null;
+        if ($level>0) {
+            $aiName='AI '.$level;
+            $q=$db->prepare('INSERT OR IGNORE INTO players(name) VALUES(?)');$q->execute([$aiName]);
+            $q=$db->prepare('SELECT id FROM players WHERE name=?');$q->execute([$aiName]);
+            $guestId=(int)$q->fetchColumn();
+            if ($guestId===$me) fail('Choose a human commander first');
+        }
+        $state=['host'=>['fleet'=>deploy($size),'ready'=>false],
+                'guest'=>['fleet'=>$level?deploy($size):[],'ready'=>$level>0],
+                'ai_level'=>$level];
+        $q=$db->prepare("INSERT INTO games(name,size,host_id,guest_id,status,state) VALUES(?,?,?,?,?,?)");
+        $q->execute([$name,$size,$me,$guestId,$level?'deployment':'waiting',json_encode($state,JSON_THROW_ON_ERROR)]);
         respond(['id'=>(int)$db->lastInsertId()]);
     }
     if ($action==='join') {
@@ -249,34 +387,19 @@ try {
                 $q=$db->prepare('UPDATE games SET state=?,status=?,turn_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
                 $q->execute([json_encode($state,JSON_THROW_ON_ERROR),$start?'active':$g['status'],$start?(int)$g['host_id']:null,$id]);
             } else {
-                if ($g['status']!=='active') fail('Game is not active',409);
                 if ((int)$g['turn_id']!==$me) fail('Not your turn',409);
-                $size=(int)$g['size'];$x=filter_var($in['x']??null,FILTER_VALIDATE_INT);$y=filter_var($in['y']??null,FILTER_VALIDATE_INT);
-                if ($x===false||$y===false||$x<0||$y<0||$x>=$size||$y>=$size) fail('Invalid target');
-                $q=$db->prepare('SELECT 1 FROM shots WHERE game_id=? AND player_id=? AND x=? AND y=?');
-                $q->execute([$id,$me,$x,$y]);if ($q->fetch()) fail('Already fired at that cell',409);
-                $enemy=$side==='host'?'guest':'host';
-                $hit=false;$sunk=false;
-                foreach ($state[$enemy]['fleet'] as $ship) {
-                    if (!in_array([$x,$y],$ship,true)) continue;
-                    $hit=true;
-                    $q=$db->prepare('SELECT x,y FROM shots WHERE game_id=? AND player_id=?');
-                    $q->execute([$id,$me]);
-                    $prior=array_map(fn($r)=>[(int)$r['x'],(int)$r['y']],$q->fetchAll());
-                    $prior[]=[$x,$y];
-                    $sunk=true;
-                    foreach ($ship as $cell) if (!in_array($cell,$prior,true)) $sunk=false;
-                    break;
+                $x=filter_var($in['x']??null,FILTER_VALIDATE_INT);
+                $y=filter_var($in['y']??null,FILTER_VALIDATE_INT);
+                if ($x===false||$y===false) fail('Invalid target');
+                $g=takeShot($db,$g,$me,$x,$y);
+                if ($g['status']==='active') {
+                    $updatedState=json_decode($g['state'],true,512,JSON_THROW_ON_ERROR);
+                    $level=(int)($updatedState['ai_level']??0);
+                    if ($level>=1 && $level<=6 && (int)$g['turn_id']===(int)$g['guest_id']) {
+                        [$ax,$ay]=chooseAiShot($db,$g,$level);
+                        $g=takeShot($db,$g,(int)$g['guest_id'],$ax,$ay);
+                    }
                 }
-                $result=$sunk?'sunk':($hit?'hit':'miss');
-                $q=$db->prepare('INSERT INTO shots(game_id,player_id,x,y,result) VALUES(?,?,?,?,?)');
-                $q->execute([$id,$me,$x,$y,$result]);
-                $q=$db->prepare('SELECT x,y FROM shots WHERE game_id=? AND player_id=?');
-                $q->execute([$id,$me]);$prior=array_map(fn($r)=>[(int)$r['x'],(int)$r['y']],$q->fetchAll());
-                $won=true;
-                foreach ($state[$enemy]['fleet'] as $ship) foreach ($ship as $cell) if (!in_array($cell,$prior,true)) $won=false;
-                $q=$db->prepare("UPDATE games SET status=?,winner_id=?,turn_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?");
-                $q->execute([$won?'finished':'active',$won?$me:null,$won?null:($enemy==='host'?(int)$g['host_id']:(int)$g['guest_id']),$id]);
             }
             return game($db,$id);
         });
