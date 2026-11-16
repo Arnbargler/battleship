@@ -356,7 +356,7 @@ try {
         });
         respond(['game'=>view($db,$g,$me)]);
     }
-    if ($action==='randomize'||$action==='place'||$action==='ready'||$action==='fire') {
+    if ($action==='randomize'||$action==='place'||$action==='ready'||$action==='fire'||$action==='ai_turn') {
         $id=(int)($in['id']??0);
         $g=mutate($db,function()use($db,$id,$me,$action,$in){
             $g=game($db,$id);
@@ -386,20 +386,21 @@ try {
                 $start=$g['guest_id']!==null && $state['host']['ready'] && $state['guest']['ready'];
                 $q=$db->prepare('UPDATE games SET state=?,status=?,turn_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
                 $q->execute([json_encode($state,JSON_THROW_ON_ERROR),$start?'active':$g['status'],$start?(int)$g['host_id']:null,$id]);
+            } elseif ($action==='ai_turn') {
+                $level=(int)($state['ai_level']??0);
+                if ($level<1 || $level>6 || (int)$g['host_id']!==$me) fail('Not your AI operation',403);
+                // Idempotent: duplicate or delayed requests cannot fire a second AI shot.
+                if ($g['status']==='active' && (int)$g['turn_id']===(int)$g['guest_id']) {
+                    [$ax,$ay]=chooseAiShot($db,$g,$level);
+                    $g=takeShot($db,$g,(int)$g['guest_id'],$ax,$ay);
+                }
             } else {
                 if ((int)$g['turn_id']!==$me) fail('Not your turn',409);
                 $x=filter_var($in['x']??null,FILTER_VALIDATE_INT);
                 $y=filter_var($in['y']??null,FILTER_VALIDATE_INT);
                 if ($x===false||$y===false) fail('Invalid target');
                 $g=takeShot($db,$g,$me,$x,$y);
-                if ($g['status']==='active') {
-                    $updatedState=json_decode($g['state'],true,512,JSON_THROW_ON_ERROR);
-                    $level=(int)($updatedState['ai_level']??0);
-                    if ($level>=1 && $level<=6 && (int)$g['turn_id']===(int)$g['guest_id']) {
-                        [$ax,$ay]=chooseAiShot($db,$g,$level);
-                        $g=takeShot($db,$g,(int)$g['guest_id'],$ax,$ay);
-                    }
-                }
+
             }
             return game($db,$id);
         });
