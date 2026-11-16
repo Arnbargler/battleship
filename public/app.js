@@ -173,6 +173,7 @@ $('ready').addEventListener('click',()=>postGame('ready'));
 function updateSoundButton() { const on=BattleSound.enabled; $('sound-toggle').textContent=on?'🔊 SOUND ON':'🔇 SOUND OFF'; $('sound-toggle').setAttribute('aria-pressed',String(on)); }
 $('sound-toggle').addEventListener('click',()=>{BattleSound.setEnabled(!BattleSound.enabled);updateSoundButton();if(BattleSound.enabled)BattleSound.play('miss');});
 updateSoundButton();
+document.addEventListener('pointerdown',()=>BattleSound.unlock(),{once:true});
 setInterval(async()=>{
   if(document.visibilityState!=='visible'||busy||polling||!me||drag)return;
   polling=true;
