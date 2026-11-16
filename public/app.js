@@ -32,7 +32,6 @@ async function loadPlayers() {
 async function loadLobby() {
   if(!me)return;
   const data=await api('lobby');
-  const open=data.games.filter(g=>g.status==='waiting');
   $('game-count').textContent=data.games.length+' listed';
   $('games').innerHTML=data.games.length ? data.games.map(g=>{
     const own=Number(g.host_id)===Number(me.id)||Number(g.guest_id)===Number(me.id);
@@ -88,7 +87,7 @@ function drawGame(g) {
   const yourTurn=g.status==='active'&&Number(g.turn_id)===Number(g.you);
   const sessionMatch=Number(g.you)===Number(me.id);
   const desc=g.status==='waiting'?'Awaiting another human commander to join. You can prepare your fleet now.':
-    g.status==='deployment'?(g.ready?'Fleet locked. Waiting for the opponent.':'Deploy your fleet and select Ready.'):
+    g.status==='deployment'?(g.ready?'Fleet locked. Waiting for the opponent.':(g.ai_level?'Place your fleet, then click Ready to face AI '+g.ai_level+'.':'Deploy your fleet and select Ready.')):
     g.status==='finished'?(Number(g.winner_id)===Number(me.id)?'VICTORY — Enemy fleet destroyed.':'DEFEAT — Your fleet was destroyed.'):
     (yourTurn?'YOUR TURN — Select a target in enemy waters.':'OPPONENT TURN — Awaiting incoming fire.');
   $('battle-status').textContent=desc+'  [Player #'+g.you+' · Turn #'+(g.turn_id??'—')+']';
@@ -123,9 +122,10 @@ $('player-form').addEventListener('submit',async e=>{
     current=null;await loadPlayers();}catch(err){notice(err.message);}
 });
 $('change-player').addEventListener('click',()=>{current=null;me=null;tabPlayerId=null;sessionStorage.removeItem(savedPlayerKey);$('identity').textContent='NO COMMANDER';section('select-panel');});
+$('opponent').addEventListener('change',()=>{$('ai-selector').hidden=$('opponent').value!=='ai';});
 $('create-form').addEventListener('submit',async e=>{
   e.preventDefault();try{
-    notice();const r=await api('create',{name:$('operation-name').value,size:Number($('board-size').value)});
+    notice();const r=await api('create',{name:$('operation-name').value,size:Number($('board-size').value),ai_level:$('opponent').value==='ai'?Number($('ai-level').value):0});
     current=r.id;await loadGame();
   }catch(err){notice(err.message);}
 });
