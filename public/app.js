@@ -1,9 +1,9 @@
 'use strict';
 const $ = id => document.getElementById(id);
-let me=null, current=null, busy=false;
+let me=null, current=null, busy=false, viewSerial=0, lastApplied=0, polling=false;
 const esc = text => String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(action, data=null, query='') {
-  const opts=data===null?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)};
+  const opts=data===null?{cache:'no-store'}:{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)};
   const res=await fetch('api.php?action='+encodeURIComponent(action)+query,opts);
   let obj;
   try { obj=await res.json(); } catch { throw Error('Server returned a non-JSON response. Check PHP logs.'); }
@@ -42,8 +42,11 @@ async function loadLobby() {
   section('lobby');
 }
 async function loadGame() {
-  if(!current||!me)return;
-  const response=await api('game',null,'&id='+current);
+  if(!current||!me||busy)return;
+  const wanted=current, serial=++viewSerial;
+  const response=await api('game',null,'&id='+wanted);
+  if(current!==wanted || serial<lastApplied || busy)return;
+  lastApplied=serial;
   drawGame(response.game);
 }
 function makeBoard(node,g,isEnemy) {
@@ -60,7 +63,7 @@ function makeBoard(node,g,isEnemy) {
     for(let x=0;x<g.size;x++){
       const k=x+','+y,shot=shotMap.get(k);
       const cell=document.createElement('button');cell.type='button';
-      const canFire=isEnemy&&g.status==='active'&&Number(g.turn_id)===Number(me.id)&&!shot;
+      const canFire=isEnemy&&g.status==='active'&&Number(g.turn_id)===Number(g.you)&&!shot;
       cell.className='cell'+(occupied.has(k)?' ship':'')+(shot?' '+(shot==='sunk'?'sunk':shot):'')+(canFire?' target':'');
       cell.textContent=shot?(shot==='miss'?'·':'✕'):'';
       cell.title=String.fromCharCode(65+x)+(y+1)+(shot?' — '+shot:'');
@@ -73,12 +76,14 @@ function makeBoard(node,g,isEnemy) {
 function drawGame(g) {
   $('battle-title').textContent=g.name;
   $('operation-subtitle').textContent='OPERATION '+g.id+' · '+g.size+'×'+g.size;
-  const yourTurn=g.status==='active'&&Number(g.turn_id)===Number(me.id);
+  const yourTurn=g.status==='active'&&Number(g.turn_id)===Number(g.you);
+  const sessionMatch=Number(g.you)===Number(me.id);
   const desc=g.status==='waiting'?'Awaiting another human commander to join. You can prepare your fleet now.':
     g.status==='deployment'?(g.ready?'Fleet locked. Waiting for the opponent.':'Deploy your fleet and select Ready.'):
     g.status==='finished'?(Number(g.winner_id)===Number(me.id)?'VICTORY — Enemy fleet destroyed.':'DEFEAT — Your fleet was destroyed.'):
     (yourTurn?'YOUR TURN — Select a target in enemy waters.':'OPPONENT TURN — Awaiting incoming fire.');
-  $('battle-status').textContent=desc;
+  $('battle-status').textContent=desc+'  [Player #'+g.you+' · Turn #'+(g.turn_id??'—')+']';
+  if(!sessionMatch) notice('Player identity mismatch: browser selected #'+me.id+' but server session is #'+g.you+'. Reload this browser and select the player again.');
   $('deployment').hidden=!['waiting','deployment'].includes(g.status);
   $('randomize').disabled=Boolean(g.ready);
   $('ready').disabled=Boolean(g.ready);
@@ -93,13 +98,13 @@ function drawGame(g) {
 async function fire(id,x,y) {
   if(busy||!confirm('Fire at '+String.fromCharCode(65+x)+(y+1)+'?'))return;
   busy=true;
-  try {notice();const r=await api('fire',{id,x,y});drawGame(r.game);}
+  try {notice();const r=await api('fire',{id,x,y});lastApplied=++viewSerial;drawGame(r.game);}
   catch(e){notice(e.message);await loadGame();}
   finally{busy=false;}
 }
 async function postGame(action) {
   if(!current||busy)return;busy=true;
-  try {notice();const r=await api(action,{id:current});drawGame(r.game);}
+  try {notice();const r=await api(action,{id:current});lastApplied=++viewSerial;drawGame(r.game);}
   catch(e){notice(e.message);}finally{busy=false;}
 }
 $('player-form').addEventListener('submit',async e=>{
@@ -123,7 +128,11 @@ $('refresh').addEventListener('click',()=>loadLobby().catch(e=>notice(e.message)
 $('back').addEventListener('click',()=>{current=null;loadLobby().catch(e=>notice(e.message));});
 $('randomize').addEventListener('click',()=>postGame('randomize'));
 $('ready').addEventListener('click',()=>postGame('ready'));
-setInterval(()=>{if(document.visibilityState!=='visible'||busy||!me)return;
-  (current?loadGame():loadLobby()).catch(e=>notice(e.message));
+setInterval(async()=>{
+  if(document.visibilityState!=='visible'||busy||polling||!me)return;
+  polling=true;
+  try {if(current)await loadGame();else await loadLobby();}
+  catch(e){notice(e.message);}
+  finally{polling=false;}
 },2500);
 loadPlayers().catch(e=>notice(e.message));
