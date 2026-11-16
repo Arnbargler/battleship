@@ -4,6 +4,7 @@ let me=null, current=null, busy=false, viewSerial=0, lastApplied=0, polling=fals
 const savedPlayerKey='battleship.player.id';
 let tabPlayerId=Number(sessionStorage.getItem(savedPlayerKey))||null;
 let drag=null, shownGame=null, audioGameId=null, lastAudioShotId=0, lastOutcome=null;
+let aiTimer=null, aiPendingGame=null;
 const esc = text => String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(action, data=null, query='') {
   const headers=tabPlayerId?{'X-Battleship-Player':String(tabPlayerId)}:{};
@@ -80,6 +81,28 @@ function makeBoard(node,g,isEnemy) {
     }
   }
 }
+function queueAiReply(g) {
+  const aiTurn=g.ai_level>0 && g.status==='active' && Number(g.turn_id)===Number(g.guest_id);
+  if(!aiTurn || current!==g.id) {
+    if(aiTimer!==null) clearTimeout(aiTimer);
+    aiTimer=null;aiPendingGame=null;return;
+  }
+  if(aiTimer!==null && aiPendingGame===g.id)return;
+  if(aiTimer!==null)clearTimeout(aiTimer);
+  aiPendingGame=g.id;
+  aiTimer=setTimeout(async()=>{
+    aiTimer=null;
+    const id=aiPendingGame;aiPendingGame=null;
+    if(current!==id || busy || drag || !me) return;
+    busy=true;
+    try {
+      const result=await api('ai_turn',{id});
+      if(current===id){lastApplied=++viewSerial;drawGame(result.game);}
+    }catch(error) {
+      notice(error.message);
+    }finally{busy=false;}
+  },1000);
+}
 function drawGame(g) {
   const shotTimeline=[...g.target_shots.map(s=>({...s,side:'outgoing'})),...g.own_shots.map(s=>({...s,side:'incoming'}))].sort((a,b)=>a.id-b.id);
   // First render is silent; subsequent server-confirmed events produce cues once.
@@ -97,6 +120,7 @@ function drawGame(g) {
     lastOutcome=g.status==='finished'?g.winner_id:null;
   }
   shownGame=g;
+  queueAiReply(g);
   $('battle-title').textContent=g.name;
   $('operation-subtitle').textContent='OPERATION '+g.id+' · '+g.size+'×'+g.size;
   const yourTurn=g.status==='active'&&Number(g.turn_id)===Number(g.you);
@@ -167,7 +191,7 @@ $('games').addEventListener('click',async e=>{
   }catch(err){notice(err.message);}
 });
 $('refresh').addEventListener('click',()=>loadLobby().catch(e=>notice(e.message)));
-$('back').addEventListener('click',()=>{current=null;loadLobby().catch(e=>notice(e.message));});
+$('back').addEventListener('click',()=>{if(aiTimer!==null)clearTimeout(aiTimer);aiTimer=null;aiPendingGame=null;current=null;loadLobby().catch(e=>notice(e.message));});
 $('randomize').addEventListener('click',()=>postGame('randomize'));
 $('ready').addEventListener('click',()=>postGame('ready'));
 function updateSoundButton() { const on=BattleSound.enabled; $('sound-toggle').textContent=on?'🔊 SOUND ON':'🔇 SOUND OFF'; $('sound-toggle').setAttribute('aria-pressed',String(on)); }
