@@ -23,10 +23,20 @@
 </section>
 <section id="battle" hidden>
   <div class="section-head"><div><small id="operation-subtitle">OPERATION</small><h2 id="battle-title">North Atlantic</h2></div><button id="back">← Lobby</button></div>
-  <div id="battle-status" class="status"></div>
+  <div class="command-strip">
+    <div class="command-label"><span class="signal-light" aria-hidden="true"></span><span id="command-state">TACTICAL LINK ACTIVE</span></div>
+    <div class="command-controls"><span id="combat-phase">STANDBY</span><button type="button" id="sound-toggle" class="ghost" aria-pressed="false">🔊 SOUND ON</button></div>
+  </div>
+  <div id="battle-status" class="status" aria-live="polite"></div>
+  <div class="combat-metrics">
+    <div><small>ROUNDS FIRED</small><strong id="metric-shots">0</strong></div>
+    <div><small>CONFIRMED HITS</small><strong id="metric-hits">0</strong></div>
+    <div><small>YOUR ACCURACY</small><strong id="metric-accuracy">0%</strong></div>
+    <div><small>INCOMING SALVOS</small><strong id="metric-incoming">0</strong></div>
+  </div>
   <div id="deployment" class="panel" hidden><div class="section-head"><div><h3>Fleet Deployment</h3><p class="muted">Left-drag ships to reposition. Press Space during a drag to rotate 90°. Release to place; red means invalid.</p></div><div class="actions"><button id="randomize">Randomize Fleet</button><button id="ready" class="primary">Ready</button></div></div></div>
-  <div class="boards"><section class="panel"><h3>ENEMY WATERS <span class="muted">— select a target on your turn</span></h3><div id="enemy-board" class="board"></div></section><section class="panel"><h3>FRIENDLY WATERS</h3><p class="muted" id="placement-hint">Left-drag a ship to move it · Space to rotate during drag</p><div id="own-board" class="board"></div></section></div>
-  <div class="panel"><h3>Combat Telemetry</h3><div id="telemetry" class="muted">Awaiting operation...</div></div>
+  <div class="boards"><section class="panel"><div class="board-heading"><h3>◈ TARGETING RADAR</h3><span class="board-tag">HOSTILE WATERS</span></div><p class="board-help">Select coordinates to fire during your turn.</p><div id="enemy-board" class="board"></div></section><section class="panel"><div class="board-heading"><h3>▣ FLEET STATUS</h3><span class="board-tag">FRIENDLY WATERS</span></div><p class="muted" id="placement-hint">Left-drag a ship to move it · Space to rotate during drag</p><div id="own-board" class="board"></div></section></div>
+  <div class="panel"><div class="board-heading"><h3>◉ COMBAT LOG</h3><span class="board-tag">LIVE TELEMETRY</span></div><div class="combat-legend"><span><b class="legend-dot hit-key"></b> HIT</span><span><b class="legend-dot miss-key"></b> MISS</span><span><b class="legend-dot sunk-key"></b> SUNK</span></div><div id="combat-log" class="combat-log" aria-live="off">Awaiting operation...</div><div id="telemetry" class="muted telemetry">Awaiting operation...</div></div>
 </section>
 <footer>COLOSSUS NAVAL COMMAND · PROTOTYPE v0.1 · LAN ONLY</footer>
 </main><script src="app.js"></script></body></html>
