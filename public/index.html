@@ -23,8 +23,8 @@
 <section id="battle" hidden>
   <div class="section-head"><div><small id="operation-subtitle">OPERATION</small><h2 id="battle-title">North Atlantic</h2></div><button id="back">← Lobby</button></div>
   <div id="battle-status" class="status"></div>
-  <div id="deployment" class="panel" hidden><div class="section-head"><div><h3>Fleet Deployment</h3><p class="muted">Ships are deployed automatically. Randomize until satisfied, then lock your fleet.</p></div><div class="actions"><button id="randomize">Randomize Fleet</button><button id="ready" class="primary">Ready</button></div></div></div>
-  <div class="boards"><section class="panel"><h3>ENEMY WATERS <span class="muted">— select a target on your turn</span></h3><div id="enemy-board" class="board"></div></section><section class="panel"><h3>FRIENDLY WATERS</h3><div id="own-board" class="board"></div></section></div>
+  <div id="deployment" class="panel" hidden><div class="section-head"><div><h3>Fleet Deployment</h3><p class="muted">Left-drag ships to reposition. Press Space during a drag to rotate 90°. Release to place; red means invalid.</p></div><div class="actions"><button id="randomize">Randomize Fleet</button><button id="ready" class="primary">Ready</button></div></div></div>
+  <div class="boards"><section class="panel"><h3>ENEMY WATERS <span class="muted">— select a target on your turn</span></h3><div id="enemy-board" class="board"></div></section><section class="panel"><h3>FRIENDLY WATERS</h3><p class="muted" id="placement-hint">Left-drag a ship to move it · Space to rotate during drag</p><div id="own-board" class="board"></div></section></div>
   <div class="panel"><h3>Combat Telemetry</h3><div id="telemetry" class="muted">Awaiting operation...</div></div>
 </section>
 <footer>COLOSSUS NAVAL COMMAND · PROTOTYPE v0.1 · LAN ONLY</footer>
