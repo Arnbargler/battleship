@@ -1,9 +1,12 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let me=null, current=null, busy=false, viewSerial=0, lastApplied=0, polling=false;
+const savedPlayerKey='battleship.player.id';
+let tabPlayerId=Number(sessionStorage.getItem(savedPlayerKey))||null;
 const esc = text => String(text??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(action, data=null, query='') {
-  const opts=data===null?{cache:'no-store'}:{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)};
+  const headers=tabPlayerId?{'X-Battleship-Player':String(tabPlayerId)}:{};
+  const opts=data===null?{cache:'no-store',headers}:{method:'POST',cache:'no-store',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(data)};
   const res=await fetch('api.php?action='+encodeURIComponent(action)+query,opts);
   let obj;
   try { obj=await res.json(); } catch { throw Error('Server returned a non-JSON response. Check PHP logs.'); }
@@ -17,7 +20,9 @@ function section(name) {
 async function loadPlayers() {
   const data=await api('players');
   $('known-players').innerHTML=data.players.map(p=>'<option value="'+esc(p.name)+'">').join('');
-  me=data.players.find(p=>Number(p.id)===Number(data.selected))||null;
+  // A tab has its own identity; PHP cookies are shared across tabs and may switch under us.
+  me=data.players.find(p=>Number(p.id)===Number(tabPlayerId))||null;
+  if(tabPlayerId&&!me){tabPlayerId=null;sessionStorage.removeItem(savedPlayerKey);}
   $('identity').textContent=me?me.name.toUpperCase():'NO COMMANDER';
   if(!me){current=null;section('select-panel');}
   else if(current) await loadGame();
@@ -83,7 +88,7 @@ function drawGame(g) {
     g.status==='finished'?(Number(g.winner_id)===Number(me.id)?'VICTORY — Enemy fleet destroyed.':'DEFEAT — Your fleet was destroyed.'):
     (yourTurn?'YOUR TURN — Select a target in enemy waters.':'OPPONENT TURN — Awaiting incoming fire.');
   $('battle-status').textContent=desc+'  [Player #'+g.you+' · Turn #'+(g.turn_id??'—')+']';
-  if(!sessionMatch) notice('Player identity mismatch: browser selected #'+me.id+' but server session is #'+g.you+'. Reload this browser and select the player again.');
+  if(!sessionMatch) notice('Player identity mismatch. Use Change Player and select your commander again.');
   $('deployment').hidden=!['waiting','deployment'].includes(g.status);
   $('randomize').disabled=Boolean(g.ready);
   $('ready').disabled=Boolean(g.ready);
@@ -108,9 +113,11 @@ async function postGame(action) {
   catch(e){notice(e.message);}finally{busy=false;}
 }
 $('player-form').addEventListener('submit',async e=>{
-  e.preventDefault();try{notice();await api('select',{name:$('player-name').value});current=null;await loadPlayers();}catch(err){notice(err.message);}
+  e.preventDefault();try{notice();const result=await api('select',{name:$('player-name').value});
+    tabPlayerId=Number(result.player.id);sessionStorage.setItem(savedPlayerKey,String(tabPlayerId));
+    current=null;await loadPlayers();}catch(err){notice(err.message);}
 });
-$('change-player').addEventListener('click',()=>{current=null;me=null;$('identity').textContent='NO COMMANDER';section('select-panel');});
+$('change-player').addEventListener('click',()=>{current=null;me=null;tabPlayerId=null;sessionStorage.removeItem(savedPlayerKey);$('identity').textContent='NO COMMANDER';section('select-panel');});
 $('create-form').addEventListener('submit',async e=>{
   e.preventDefault();try{
     notice();const r=await api('create',{name:$('operation-name').value,size:Number($('board-size').value)});
