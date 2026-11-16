@@ -94,6 +94,7 @@ function drawGame(g) {
   $('battle-status').textContent=desc+'  [Player #'+g.you+' · Turn #'+(g.turn_id??'—')+']';
   if(!sessionMatch) notice('Player identity mismatch. Use Change Player and select your commander again.');
   $('deployment').hidden=!['waiting','deployment'].includes(g.status);
+  $('placement-hint').hidden=g.ready || !['waiting','deployment'].includes(g.status);
   $('randomize').disabled=Boolean(g.ready);
   $('ready').disabled=Boolean(g.ready);
   $('ready').textContent=g.ready?'Fleet Ready ✓':'Ready — Lock Fleet';
