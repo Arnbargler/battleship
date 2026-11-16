@@ -116,7 +116,7 @@ function placementCells(int $size, array $fleet, int $index, int $x, int $y, str
 }
 
 function shots(PDO $db, int $id): array {
-    $q=$db->prepare('SELECT player_id,x,y,result FROM shots WHERE game_id=? ORDER BY id');
+    $q=$db->prepare('SELECT id,player_id,x,y,result FROM shots WHERE game_id=? ORDER BY id');
     $q->execute([$id]); return $q->fetchAll();
 }
 function view(PDO $db, array $g, int $me): array {
@@ -128,7 +128,7 @@ function view(PDO $db, array $g, int $me): array {
     $all=shots($db,$id);
     $own=[];$target=[];
     foreach ($all as $s) {
-        $line=['x'=>(int)$s['x'],'y'=>(int)$s['y'],'result'=>$s['result']];
+        $line=['id'=>(int)$s['id'],'x'=>(int)$s['x'],'y'=>(int)$s['y'],'result'=>$s['result']];
         if ((int)$s['player_id']===$me) $target[]=$line; else $own[]=$line;
     }
     $finished=$g['status']==='finished';
